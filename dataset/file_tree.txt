@@ -1,0 +1,42 @@
+dataset/
+├── 202608292110_1st_round/
+│   ├── Screenrecorder-2026-08-29-21-06-03-818.mp4				完整录像，不用管
+│   ├── Screenshot_2026-08-29-21-06-10-167_com.YostarJP..jpg		初始状态
+│   ├── Screenshot_2026-08-29-21-06-13-120_com.YostarJP..jpg		第1回合-已选择A3
+│   ├── Screenshot_2026-08-29-21-06-20-607_com.YostarJP..jpg		第1回合-已翻开A3-空
+│   ├── Screenshot_2026-08-29-21-06-30-995_com.YostarJP..jpg		第2回合-已选择B2
+│   ├── Screenshot_2026-08-29-21-06-37-762_com.YostarJP..jpg		第2回合-已翻开B2-物品A第1行第2列（该格在物品内的坐标，下同）90度（逆时针旋转角，下同）
+│   ├── Screenshot_2026-08-29-21-06-44-467_com.YostarJP..jpg		第3回合-已选择B1 B3
+│   ├── Screenshot_2026-08-29-21-06-51-614_com.YostarJP..jpg		第3回合-已翻开B1 B3-物品A完全露出
+│   ├── Screenshot_2026-08-29-21-07-52-543_com.YostarJP..jpg		第4回合-已选择C4
+│   ├── Screenshot_2026-08-29-21-07-58-619_com.YostarJP..jpg		第4回合-已翻开C4-物品B第1行第3列180度
+│   ├── Screenshot_2026-08-29-21-08-15-784_com.YostarJP..jpg		第5回合-已翻开B4 D4-物品B继续露出一部分
+│   ├── Screenshot_2026-08-29-21-08-22-151_com.YostarJP..jpg		第6回合-已选择E4
+│   ├── Screenshot_2026-08-29-21-08-28-578_com.YostarJP..jpg		第6回合-已翻开E4-物品B完全露出
+│   ├── Screenshot_2026-08-29-21-08-39-252_com.YostarJP..jpg		第7回合-已选择C5
+│   ├── Screenshot_2026-08-29-21-08-44-066_com.YostarJP..jpg		第7回合-已翻开C5-物品B第1行第3列0度
+│   ├── Screenshot_2026-08-29-21-08-48-453_com.YostarJP..jpg		第8回合-已选择A5 B5 D5
+│   ├── Screenshot_2026-08-29-21-08-54-519_com.YostarJP..jpg		第8回合-已翻开A5 B5 D5-物品B完全露出
+│   ├── Screenshot_2026-08-29-21-09-00-707_com.YostarJP..jpg		第9回合-已选择G5
+│   ├── Screenshot_2026-08-29-21-09-05-966_com.YostarJP..jpg		第9回合-已翻开G5-物品A第1行第3列0度
+│   ├── Screenshot_2026-08-29-21-09-10-945_com.YostarJP..jpg		第10回合-已选择E5 F5
+│   ├── Screenshot_2026-08-29-21-09-17-401_com.YostarJP..jpg		第10回合-已翻开E5 F5-物品A完全露出
+│   ├── Screenshot_2026-08-29-21-09-31-419_com.YostarJP..jpg		第11回合-已翻开H3-空
+│   ├── Screenshot_2026-08-29-21-09-37-120_com.YostarJP..jpg		第12回合-已选择D2
+│   ├── Screenshot_2026-08-29-21-09-43-626_com.YostarJP..jpg		第12回合-已翻开D2-物品C第1行第2列90度
+│   ├── Screenshot_2026-08-29-21-09-48-685_com.YostarJP..jpg		第13回合-已选择D1 D3 E1 E2 E3
+│   ├── Screenshot_2026-08-29-21-09-53-968_com.YostarJP..jpg		第13回合-已翻开D1 D3 E1 E2 E3-物品C完全露出
+│   ├── Screenshot_2026-08-29-21-10-03-057_com.YostarJP..jpg		第14回合-已选择I4
+│   ├── Screenshot_2026-08-29-21-10-09-592_com.YostarJP..jpg		第14回合-已翻开I4-空
+│   ├── Screenshot_2026-08-29-21-10-13-898_com.YostarJP..jpg		第15回合-已选择G2
+│   ├── Screenshot_2026-08-29-21-10-18-410_com.YostarJP..jpg		第15回合-已翻开G2-物品A第1行第3列90度
+│   ├── Screenshot_2026-08-29-21-10-20-691_com.YostarJP..jpg		第16回合-已选择G3 G4
+│   ├── Screenshot_2026-08-29-21-10-42-355_com.YostarJP..jpg		第16回合-已翻开G3 G4-物品A完全露出
+│   ├── Screenshot_2026-08-29-21-10-48-590_com.YostarJP..jpg		第17回合-已选择F1
+│   ├── Screenshot_2026-08-29-21-10-58-958_com.YostarJP..jpg		第17回合-已翻开F1-物品B第1行第4列90度
+│   ├── Screenshot_2026-08-29-21-11-02-457_com.YostarJP..jpg		第18回合-已选择F2 F3 F4 I1
+│   ├── Screenshot_2026-08-29-21-11-11-314_com.YostarJP..jpg		第18回合-已翻开F2 F3 F4 I1-物品B完全露出，且物品A第1行第1列270度
+│   ├── Screenshot_2026-08-29-21-11-16-011_com.YostarJP..jpg		第19回合-已选择I2 I3
+│   ├── Screenshot_2026-08-29-21-11-21-376_com.YostarJP..jpg		第19回合-已翻开I2 I3-物品A完全露出，本轮结束提示下一轮
+│   └── Screenshot_2026-08-29-21-11-32-464_com.YostarJP..jpg		下一轮初始状态
+└── file_tree_generate.py

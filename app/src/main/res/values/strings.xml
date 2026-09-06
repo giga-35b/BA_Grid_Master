@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BA Grid Master</string>
+    <string name="capture_channel_name">屏幕捕获</string>
+    <string name="capture_notification_title">BA Grid Master 正在读取游戏画面</string>
+    <string name="capture_notification_text">返回应用可停止屏幕捕获</string>
+    <string name="overlay_channel_name">悬浮助手</string>
+    <string name="overlay_notification_title">BA Grid Master 悬浮助手运行中</string>
+    <string name="overlay_notification_text">点击悬浮按钮可运行棋盘分析</string>
+</resources>
