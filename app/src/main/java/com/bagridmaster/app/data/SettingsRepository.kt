@@ -70,8 +70,8 @@ class SettingsRepository(context: Context) {
     }
 
     private fun toSettings(preferences: Preferences): AppSettings = AppSettings(
-        bubbleSizeDp = normalizedBubbleSize(preferences[Keys.BUBBLE_SIZE] ?: 64f),
-        bubbleOpacity = preferences[Keys.BUBBLE_OPACITY] ?: 0.92f,
+        bubbleSizeDp = normalizedBubbleSize(preferences[Keys.BUBBLE_SIZE] ?: 40f),
+        bubbleOpacity = preferences[Keys.BUBBLE_OPACITY] ?: 0.60f,
         overlayContentMode = OverlayContentMode.fromSaved(preferences[Keys.OVERLAY_CONTENT_MODE]),
         temporaryHideSeconds = normalizedTemporaryHideSeconds(preferences[Keys.TEMPORARY_HIDE_SECONDS] ?: 5),
         snapToEdge = preferences[Keys.SNAP_TO_EDGE] ?: true,
@@ -87,7 +87,7 @@ class SettingsRepository(context: Context) {
         showTopCandidates = preferences[Keys.SHOW_TOP] ?: false,
         showBoardHeaders = preferences[Keys.SHOW_BOARD_HEADERS] ?: true,
         showKnownObjects = preferences[Keys.SHOW_KNOWN_OBJECTS] ?: true,
-        showInventoryInfo = preferences[Keys.SHOW_INVENTORY_INFO] ?: false,
+        showInventoryInfo = preferences[Keys.SHOW_INVENTORY_INFO] ?: true,
         experienceCalibrationEnabled = preferences[Keys.EXPERIENCE_CALIBRATION] ?: true,
         blackBorderDetectionEnabled = preferences[Keys.BLACK_BORDER_DETECTION] ?: true,
         imageInputMode = preferences[Keys.IMAGE_INPUT_MODE]?.let { saved -> ImageInputMode.entries.firstOrNull { it.name == saved } }

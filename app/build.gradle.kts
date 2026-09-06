@@ -3,6 +3,22 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val releaseSigningEnvironment = mapOf(
+    "BA_GRID_MASTER_KEYSTORE_FILE" to providers.environmentVariable("BA_GRID_MASTER_KEYSTORE_FILE").orNull,
+    "BA_GRID_MASTER_KEYSTORE_PASSWORD" to providers.environmentVariable("BA_GRID_MASTER_KEYSTORE_PASSWORD").orNull,
+    "BA_GRID_MASTER_KEY_ALIAS" to providers.environmentVariable("BA_GRID_MASTER_KEY_ALIAS").orNull,
+    "BA_GRID_MASTER_KEY_PASSWORD" to providers.environmentVariable("BA_GRID_MASTER_KEY_PASSWORD").orNull,
+)
+val releaseSigningValueCount = releaseSigningEnvironment.values.count { !it.isNullOrBlank() }
+check(releaseSigningValueCount == 0 || releaseSigningValueCount == releaseSigningEnvironment.size) {
+    "Production release signing requires all four BA_GRID_MASTER_* environment variables, or none of them."
+}
+val productionSigningEnabled = releaseSigningValueCount == releaseSigningEnvironment.size
+if (productionSigningEnabled) {
+    val keyStorePath = releaseSigningEnvironment.getValue("BA_GRID_MASTER_KEYSTORE_FILE")!!
+    check(file(keyStorePath).isFile) { "Production keystore does not exist: $keyStorePath" }
+}
+
 android {
     namespace = "com.bagridmaster.app"
     compileSdk {
@@ -15,14 +31,28 @@ android {
         applicationId = "com.bagridmaster.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 9
-        versionName = "1.1.6"
+        versionCode = 10
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (productionSigningEnabled) {
+            create("productionRelease") {
+                storeFile = file(releaseSigningEnvironment.getValue("BA_GRID_MASTER_KEYSTORE_FILE")!!)
+                storePassword = releaseSigningEnvironment.getValue("BA_GRID_MASTER_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigningEnvironment.getValue("BA_GRID_MASTER_KEY_ALIAS")
+                keyPassword = releaseSigningEnvironment.getValue("BA_GRID_MASTER_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (productionSigningEnabled) {
+                signingConfig = signingConfigs.getByName("productionRelease")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

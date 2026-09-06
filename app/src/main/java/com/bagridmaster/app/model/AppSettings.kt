@@ -1,8 +1,8 @@
 package com.bagridmaster.app.model
 
 data class AppSettings(
-    val bubbleSizeDp: Float = 64f,
-    val bubbleOpacity: Float = 0.92f,
+    val bubbleSizeDp: Float = 40f,
+    val bubbleOpacity: Float = 0.60f,
     val overlayContentMode: OverlayContentMode = OverlayContentMode.COMPACT,
     val temporaryHideSeconds: Int = 5,
     val snapToEdge: Boolean = true,
@@ -13,7 +13,7 @@ data class AppSettings(
     val strategyAlgorithm: StrategyAlgorithm = StrategyAlgorithm.LIMITED_LOOKAHEAD,
     val showBoardHeaders: Boolean = true,
     val showKnownObjects: Boolean = true,
-    val showInventoryInfo: Boolean = false,
+    val showInventoryInfo: Boolean = true,
     val experienceCalibrationEnabled: Boolean = true,
     val blackBorderDetectionEnabled: Boolean = true,
     val imageInputMode: ImageInputMode = ImageInputMode.SCREEN_CAPTURE,
@@ -54,7 +54,7 @@ enum class OverlayContentMode(
     }
 }
 
-fun normalizedBubbleSize(value: Float): Float = if (value.isFinite()) value.coerceIn(30f, 75f) else 64f
+fun normalizedBubbleSize(value: Float): Float = if (value.isFinite()) value.coerceIn(30f, 75f) else 40f
 
 enum class MarkerColor(
     val label: String,

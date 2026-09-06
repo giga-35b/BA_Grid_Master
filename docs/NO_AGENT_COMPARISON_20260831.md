@@ -2,7 +2,7 @@
 
 ## 有代理基线
 
-来自真实应用的21:43:55日志，attempt=1788183829723：
+来自真实应用的一次基线日志：
 
 ```text
 totalMs=6509 inputMs=290 recognitionMs=5921 recommendationMs=293
@@ -13,7 +13,7 @@ completionMs=2 explorationMs=291
 输入为同一棋盘：B2空、H2为物品c的浅色角，库存a/b/c为3/4/1。
 当前安装保留1.0.0/versionCode 2，DEBUGGABLE、TEST_ONLY标志；未安装替换APK。
 
-旧进程25280中通过 `/proc/25280/maps` 确认加载了 `code_cache/startup_agents/b0fe613d-agent.so` 和 `libopenjdkjvmti.so`。
+旧进程中通过 `/proc/<pid>/maps` 确认加载了 `code_cache/startup_agents/b0fe613d-agent.so` 和 `libopenjdkjvmti.so`。
 代理二进制包含Android Studio部署、Live Edit和解释器符号。仅凭加载不能证明全部性能差异，需真实应用内无代理复测。
 
 ## 已执行的可恢复隔离
@@ -27,7 +27,7 @@ completionMs=2 explorationMs=291
    - 备份：`/data/user/0/com.bagridmaster.app/code_cache/perf_agent_backup_20260831_noagent/b0fe613d-agent.so`
 4. 移动前后SHA256均为 `462fdd121b4646872610a31e33c38007af6a89e1c320455988744f392e89d165`。
 5. 通过系统启动入口打开现有 `.MainActivity`。
-6. 新进程9196的startup_agents目录为空；maps中启动代理、该agent、live_edit、deploy agent及libopenjdkjvmti匹配数为0；先前noncooperative线程不再存在。
+6. 新进程的 startup_agents 目录为空；maps 中启动代理、该 agent、live_edit、deploy agent 及 libopenjdkjvmti 匹配数为 0；先前 noncooperative 线程不再存在。
 
 未改动代码、应用设置、权限、经验坐标、相册截图或冻结发布基线。代理只是隔离备份，尚未删除或恢复。测试期间请不要使用IDE的Run、Debug、Apply Changes，以免再次注入代理。
 
@@ -55,7 +55,7 @@ completionMs=2 explorationMs=291
    - 设置：`622037794D6091F13491113476CE377C7F312A8DADA0937C129D5AF1EE1DB3E2`
    - 经验坐标：`CAF6B8EECC32FC5DAC249BCB9F2A62FC821C30A9CBD0A7F86473F00FCDB642B6`
 7. 相册权限保持已授权。安装标志保留DEBUGGABLE，TEST_ONLY已消失。系统清空了旧code_cache（含旧代理备份和IDE增量层）；这些文件已完整备份至电脑，可以恢复。
-8. 通过系统入口打开新版应用，新进程5375；maps中Studio代理/JVMTI/旧增量DEX匹配数为0，code_cache为空。
+8. 通过系统入口打开新版应用后，maps 中 Studio 代理、JVMTI 和旧增量 DEX 的匹配数为 0，code_cache 为空。
 
 ## 完整APK的真实应用内复测结果
 
@@ -75,9 +75,9 @@ completionMs=2 explorationMs=291
 | 补全建议 | 2 | 1 | 1 |
 | 探索建议 | 291 | 132 | 49 |
 
-对应22:24:39.043（attempt=1788186275366）和22:24:49.244（attempt=1788186286102），PID均为5375，GALLERY、2400×1080。原始日志已保存在电脑备份目录的 `analysis-live.log`。临时日志采集在读取完成后已停止。
+对应同一轮的两次完整安装后识别，输入均为 GALLERY、2400×1080。临时日志采集在读取完成后已停止。
 
-测试后再次验证：当前进程仍为5375，Studio代理、JVMTI和IDE增量DEX的maps匹配数为0，code_cache为空，手机安装包SHA256仍与完整Debug APK一致。
+测试后再次验证：当前进程中 Studio 代理、JVMTI 和 IDE 增量 DEX 的 maps 匹配数为 0，code_cache 为空，手机安装包 SHA256 仍与完整 Debug APK 一致。
 
 ### 结论与边界
 

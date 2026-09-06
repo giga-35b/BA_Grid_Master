@@ -222,6 +222,7 @@ class OverlayService : Service() {
             text = "×"
             gravity = Gravity.CENTER
             setTextColor(0xFFFF4D4D.toInt())
+            textSize = CLOSE_BUTTON_TEXT_SIZE_SP
             includeFontPadding = false
             minWidth = 0
             minimumWidth = 0
@@ -331,7 +332,7 @@ class OverlayService : Service() {
         val galleryMode = currentSettings.imageInputMode == ImageInputMode.LATEST_PHOTO
         val actionTextSize = minOf(if (galleryMode) 15f else 22f,
             normalizedBubbleSize(currentSettings.bubbleSizeDp) * 0.4f)
-        close.textSize = actionTextSize
+        close.textSize = CLOSE_BUTTON_TEXT_SIZE_SP
         contentRoot.removeAllViews()
         galleryNoticeView = null
         (action.parent as? ViewGroup)?.removeView(action)
@@ -394,7 +395,9 @@ class OverlayService : Service() {
                 contentRoot.addView(content)
             }
         }
-        val closeDiameter = closeButtonDiameterPx(buttonSize, dp(4f), close.paint.fontMetrics)
+        val closeDiameter = kotlin.math.ceil(close.paint.measureText(close.text.toString()) * 2f)
+            .toInt()
+            .coerceAtLeast(1)
         close.layoutParams = FrameLayout.LayoutParams(closeDiameter, closeDiameter, Gravity.END or Gravity.BOTTOM)
         close.bringToFront()
         renderOverlayContent()
@@ -412,7 +415,7 @@ class OverlayService : Service() {
         val ready = galleryWorkflow.phase == GalleryCaptureWorkflow.Phase.READY
         val actionTextSize = minOf(if (galleryMode) 15f else 22f, normalizedBubbleSize(currentSettings.bubbleSizeDp) * 0.4f)
         actionView?.textSize = actionTextSize
-        closeView?.textSize = actionTextSize
+        closeView?.textSize = CLOSE_BUTTON_TEXT_SIZE_SP
         temporaryHideView?.apply {
             textSize = actionTextSize
             visibility = if (galleryMode && ready && !isAnalyzing) View.VISIBLE else View.GONE
@@ -805,18 +808,9 @@ class OverlayService : Service() {
 
     private fun closeBackground() = GradientDrawable().apply {
         shape = GradientDrawable.OVAL
-        setColor(0xEB262B31.toInt())
+        setColor(Color.TRANSPARENT)
         setStroke(dp(1f), 0xFFFF6B6B.toInt())
     }
-
-    private fun closeButtonDiameterPx(
-        actionButtonSizePx: Int,
-        paddingPx: Int,
-        fontMetrics: android.graphics.Paint.FontMetrics,
-    ): Int = maxOf(
-        actionButtonSizePx / 2,
-        kotlin.math.ceil(fontMetrics.descent - fontMetrics.ascent).toInt() + paddingPx,
-    ).coerceAtMost(actionButtonSizePx)
 
     private fun panelBackground() = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
@@ -888,6 +882,7 @@ class OverlayService : Service() {
         private const val CHANNEL_ID = "overlay_assistant"
         private const val NOTIFICATION_ID = 2102
         private const val EXTRA_REQUEST_ID = "assistant_request_id"
+        private const val CLOSE_BUTTON_TEXT_SIZE_SP = 15f
 
         fun start(context: Context, requestId: Long) {
             ContextCompat.startForegroundService(

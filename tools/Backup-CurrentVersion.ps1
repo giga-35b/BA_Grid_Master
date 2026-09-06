@@ -1,4 +1,8 @@
-param([string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot))
+param(
+    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [ValidateSet('version-backup', 'release-baseline')]
+    [string]$Purpose = 'version-backup'
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -7,10 +11,17 @@ $build = Get-Content -LiteralPath (Join-Path $root 'app/build.gradle.kts') -Raw
 $version = [regex]::Match($build, 'versionName\s*=\s*"([^"]+)"').Groups[1].Value
 $code = [int][regex]::Match($build, 'versionCode\s*=\s*(\d+)').Groups[1].Value
 if (!$version -or $code -le 0) { throw 'Cannot read current version.' }
-$verification = Get-ChildItem -LiteralPath (Join-Path $root 'app/build/outputs/apk') -Recurse -Filter verification.json |
+$verificationCandidates = @(Get-ChildItem -LiteralPath (Join-Path $root 'app/build/outputs/apk') -Recurse -Filter verification.json |
     ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json } |
-    Where-Object { $_.VersionName -eq $version -and $_.VersionCode -eq $code -and !$_.Debuggable } |
-    Select-Object -First 1
+    Where-Object { $_.VersionName -eq $version -and $_.VersionCode -eq $code -and !$_.Debuggable })
+$verification = if ($Purpose -eq 'release-baseline') {
+    $verificationCandidates | Where-Object {
+        $_.CertificateSHA256 -eq '72ADAB147BC41A86674E1CB3A921063572A80C786D9226EBE19DD760C0958FEE' -and
+        $_.APK -like '*\production-release\*'
+    } | Select-Object -First 1
+} else {
+    $verificationCandidates | Select-Object -First 1
+}
 if (!$verification) { throw 'No verified non-debug APK matches the current version.' }
 $apk = Get-Item -LiteralPath $verification.APK
 if ((Get-FileHash -LiteralPath $apk.FullName -Algorithm SHA256).Hash -ne $verification.SHA256) {
@@ -42,7 +53,7 @@ $records = @($files | ForEach-Object {
 $backupRoot = Join-Path $root 'backups'
 if (!(Test-Path -LiteralPath $backupRoot)) { New-Item -ItemType Directory -Path $backupRoot | Out-Null }
 if ((Get-Item -LiteralPath $backupRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked backup root.' }
-$destination = Join-Path $backupRoot "BA_Grid_Master-$version-pre-github-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+$destination = Join-Path $backupRoot "BA_Grid_Master-$version-$Purpose-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 New-Item -ItemType Directory -Path $destination | Out-Null
 $zipPath = Join-Path $destination "BA_Grid_Master-$version-source.zip"
 $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
@@ -79,6 +90,7 @@ $manifest = [ordered]@{
     archiveSHA256=(Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
     apkSHA256=$verification.SHA256
     exclusions=@('local.properties','Gradle/IDE caches','private signing keys','build intermediates','previous backups')
+    purpose=$Purpose
     verificationNote='All ZIP entries and copied APK verified. Test reports are existing reports; no tests rerun by this backup.'
 }
 [IO.File]::WriteAllText((Join-Path $destination 'backup-manifest.json'), ($manifest | ConvertTo-Json -Depth 8))
