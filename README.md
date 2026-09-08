@@ -10,7 +10,7 @@
 
 ### [点击下载最新版 APK](https://github.com/giga-35b/BA_Grid_Master/releases/latest)
 
-### [介绍视频（B站）](https://space.bilibili.com/15097920)
+### [介绍视频（B站）](https://www.bilibili.com/video/BV1mFYH6tEik)
 
 支持 Android 8.0（API 26）及以上系统。
 
@@ -31,7 +31,7 @@
 
 ## 使用方法
 
-[介绍视频（B站）](https://space.bilibili.com/15097920)
+[介绍视频（B站）](https://www.bilibili.com/video/BV1mFYH6tEik)
 
 请使用包含完整棋盘和左下三张物品卡的横屏原图，不要使用裁剪图、长截图或本应用导出的标注图再次识别。
 
