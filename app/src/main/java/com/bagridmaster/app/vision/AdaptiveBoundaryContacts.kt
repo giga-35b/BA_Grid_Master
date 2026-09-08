@@ -13,17 +13,27 @@ import kotlin.math.sqrt
  * background here.
  */
 internal object AdaptiveBoundaryContacts {
-    fun measure(frame: RgbaFrame, region: ScreenRegion): DoubleArray {
+    fun measure(
+        frame: RgbaFrame,
+        region: ScreenRegion,
+        background: OpenCellBackgroundModel? = null,
+    ): DoubleArray {
         val safe = ScreenRegion(region.left.coerceIn(0, frame.width - 1),
             region.top.coerceIn(0, frame.height - 1), region.right.coerceIn(1, frame.width),
             region.bottom.coerceIn(1, frame.height))
         if (safe.width < 12 || safe.height < 12) return DoubleArray(4)
         return doubleArrayOf(
-            side(frame, safe, 0), side(frame, safe, 1), side(frame, safe, 2), side(frame, safe, 3),
+            side(frame, safe, 0, background), side(frame, safe, 1, background),
+            side(frame, safe, 2, background), side(frame, safe, 3, background),
         )
     }
 
-    private fun side(frame: RgbaFrame, region: ScreenRegion, side: Int): Double {
+    private fun side(
+        frame: RgbaFrame,
+        region: ScreenRegion,
+        side: Int,
+        background: OpenCellBackgroundModel?,
+    ): Double {
         val perpendicular = if (side % 2 == 0) region.height else region.width
         val tangent = if (side % 2 == 0) region.width else region.height
         val borderInset = max(2, (perpendicular * 0.025f).roundToInt())
@@ -49,12 +59,16 @@ internal object AdaptiveBoundaryContacts {
                 colours += rgb(frame, x, y)
                 position += 2
             }
-            if (colours.size >= 5) scores += lineTexture(colours)
+            if (colours.size >= 5) {
+                val texture = lineTexture(colours)
+                val support = background?.let { residualSupport(colours, it) } ?: 1.0
+                scores += minOf(texture, support)
+            }
             depth += depthStep
         }
         if (scores.isEmpty()) return 0.0
-        // The closest three usable lines implement "texture persists until the border".  A wider
-        // line can support that evidence, but cannot rescue a clean near-border background strip.
+        // Average the closest usable lines to tolerate a one-pixel anti-aliased/grid offset.
+        // A genuinely clean strip is vetoed separately by the board-local background model.
         val near = scores.take(3).average()
         val inner = scores.average()
         val persistent = minOf(near, inner * 1.35)
@@ -63,6 +77,26 @@ internal object AdaptiveBoundaryContacts {
         // conspicuous structure becomes positive continuation evidence; weaker values remain an
         // unknown/clean edge rather than being promoted by the planner's much lower 12% gate.
         return persistent.takeIf { it >= 0.40 }?.coerceIn(0.0, 1.0) ?: 0.0
+    }
+
+    private fun residualSupport(
+        colours: List<IntArray>,
+        background: OpenCellBackgroundModel,
+    ): Double {
+        val residual = colours.map { !background.matches(it, EDGE_BACKGROUND_DISTANCE) }
+        val ratio = residual.count { it }.toDouble() / residual.size.coerceAtLeast(1)
+        var longest = 0
+        var run = 0
+        for (present in residual) {
+            if (present) {
+                run++
+                longest = max(longest, run)
+            } else run = 0
+        }
+        val connected = longest.toDouble() / residual.size.coerceAtLeast(1)
+        // The residual fraction discounts structure explained by the board-local background.
+        // Callers use this softened value only where a known shape can validate the direction.
+        return max(ratio, connected)
     }
 
     private fun lineTexture(colours: List<IntArray>): Double {
@@ -83,6 +117,8 @@ internal object AdaptiveBoundaryContacts {
         // and detail.  Both are colour-agnostic, and a smooth single-colour cover scores near zero.
         return max(spread, changeRatio * 2.4).coerceIn(0.0, 1.0)
     }
+
+    private const val EDGE_BACKGROUND_DISTANCE = 24
 
     private fun rgb(frame: RgbaFrame, x: Int, y: Int): IntArray {
         val safeX = x.coerceIn(0, frame.width - 1)

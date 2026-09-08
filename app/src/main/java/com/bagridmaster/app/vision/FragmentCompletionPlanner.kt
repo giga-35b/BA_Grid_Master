@@ -168,7 +168,15 @@ class FragmentCompletionPlanner {
                 fullCompletions += PlannedLitObject(item.id, best.itemIndex, listOf(best.cells), "情况1：可靠匹配")
                 return@map item.copy(completionEvidence = "情况1：可靠匹配，本次可完整补开；探索将使用该物品的摆法与数量，不改写实际格子状态")
             }
-            val evidence = edges.filter { it.cell in item.observedCells }
+            val rawEvidence = edges.filter { it.cell in item.observedCells }
+            val isKnownTwoByTwo = placements.all { it.rows == 2 && it.columns == 2 } &&
+                placements.map { it.itemIndex }.distinct().size == 1
+            // Background subtraction can erase pale real edges. Use it only when a confirmed 2x2
+            // shape can cross-check the two perpendicular continuation directions.
+            val evidence = if (isKnownTwoByTwo) rawEvidence.map { edge -> edge.copy(
+                top = edge.backgroundTop, right = edge.backgroundRight,
+                bottom = edge.backgroundBottom, left = edge.backgroundLeft,
+            ) } else rawEvidence
             val squarePlacements = SquarePlacementResolver.resolve(placements, evidence)
             if (squarePlacements.isNotEmpty() && squarePlacements.map { it.cells }.distinct().size == 1 &&
                 squarePlacements.first().cells.none { states[it] == BoardCellState.UNCERTAIN }) {
@@ -180,6 +188,23 @@ class FragmentCompletionPlanner {
                     else "情况3：正方形范围可补开，但物品种类不唯一，暂停探索"
                 val addresses = footprint.sortedWith(compareBy({ it.row }, { it.column })).joinToString(" ") { cellAddress(it.row, it.column) }
                 return@map item.copy(completionEvidence = "$decision；推定占格：$addresses；不依赖贴图旋转；${edgeText(evidence)}")
+            }
+            if (isKnownTwoByTwo) {
+                val rankedSquare = SquarePlacementResolver.resolveBestEffortTwoByTwo(placements, evidence)
+                if (rankedSquare.size == 1 && rankedSquare.single().cells.none {
+                        states[it] == BoardCellState.UNCERTAIN
+                    }) {
+                    val footprint = rankedSquare.single().cells
+                    footprint.forEach { suggestOwn(it, 0.75, "2×2形状约束补全 ${item.id}") }
+                    fullCompletions += PlannedLitObject(item.id, rankedSquare.single().itemIndex,
+                        listOf(footprint), "情况2：2×2形状约束选择占优角")
+                    val addresses = footprint.sortedWith(compareBy({ it.row }, { it.column }))
+                        .joinToString(" ") { cellAddress(it.row, it.column) }
+                    return@map item.copy(completionEvidence =
+                        "情况2：2×2物品仅允许两个垂直方向延伸，按整体边缘证据选择占优角；推定占格：$addresses；${edgeText(evidence)}")
+                }
+                return@map item.copy(completionEvidence =
+                    "情况3：2×2物品的边缘证据冲突或优势不足，不退回四向相邻扩展；${edgeText(evidence)}")
             }
             // Actual boundary contact outranks the silhouette's principal axis. A curved
             // head may be horizontally wide while its neck continues down through the cell edge.

@@ -38,6 +38,19 @@ class GameVisionDetectorDatasetTest {
     }
 
     @Test
+    fun twoByTwoFragmentRejectsBackgroundOnlyTopAndRightEdges() {
+        val frame = loadFrame(resolveFile("dataset/regressions/two-by-two-background-edge-20260908.png"))
+        val result = checkNotNull(GameVisionDetector().analyze(frame))
+        val edge = checkNotNull(result.fragmentEdges.singleOrNull {
+            it.cell.row == 3 && it.cell.column == 1
+        }) { "B4 was not retained as the sole lit fragment: ${result.fragmentEdges}" }
+        assertTrue("B4 backgroundTop=${edge.backgroundTop}", edge.backgroundTop < 0.12)
+        assertTrue("B4 backgroundRight=${edge.backgroundRight}", edge.backgroundRight < 0.12)
+        assertTrue("B4 backgroundBottom=${edge.backgroundBottom}", edge.backgroundBottom >= 0.12)
+        assertTrue("B4 backgroundLeft=${edge.backgroundLeft}", edge.backgroundLeft >= 0.12)
+    }
+
+    @Test
     fun multicolorCoveredBoardDoesNotBecomeStaircaseObjectsAndInventoryStaysRectangular() {
         val frame = loadFrame(resolveFile("dataset/regressions/multicolor-rectangular-items-20260902.jpg"))
         val result = checkNotNull(GameVisionDetector().analyze(frame))

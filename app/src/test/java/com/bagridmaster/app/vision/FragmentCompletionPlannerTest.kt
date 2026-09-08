@@ -65,13 +65,25 @@ class FragmentCompletionPlannerTest {
             .any { it.origin == GridCell(0, 1) && it.columns == 1 })
     }
 
-    @Test fun completeCoverageOfSeveralSquarePlacementsRetainsAllAlternatives() {
+    @Test fun contradictoryTwoByTwoEdgesDoNotExpandInFourDirections() {
         val result = FragmentCompletionPlanner().complete(board, cells, listOf(card(2, 2)), listOf(item),
             listOf(FragmentEdgeEvidence(source, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0)))
-        assertEquals(8, result.recommendations.size)
-        assertEquals(4, result.fullCompletions.single().footprints.size)
-        val coverage = result.recommendations.map { GridCell(it.row, it.column) }.toSet() + source
-        assertTrue(result.fullCompletions.single().footprints.all { coverage.containsAll(it) })
+        assertTrue(result.recommendations.isEmpty())
+        assertTrue(result.fullCompletions.isEmpty())
+        assertTrue(result.objects.single().completionEvidence.contains("不退回四向"))
+    }
+
+    @Test fun noisyTwoByTwoEdgesSelectOnlyTheDominantCorner() {
+        val fragment = GridCell(3, 1)
+        val state = cells.map { it.copy(state = if (GridCell(it.row, it.column) == fragment)
+            BoardCellState.OPEN_FRAGMENT else BoardCellState.CLOSED) }
+        val result = FragmentCompletionPlanner().complete(board, state, listOf(card(2, 2)),
+            listOf(item.copy(observedCells = setOf(fragment))),
+            listOf(FragmentEdgeEvidence(fragment, 0.41, 0.69, 0.60, 0.75, 0.0, 0.0)))
+        assertEquals(setOf("A4", "A5", "B5"),
+            result.recommendations.map { cellAddress(it.row, it.column) }.toSet())
+        assertEquals(1, result.fullCompletions.size)
+        assertTrue(result.recommendations.all { it.strategy.contains("2×2") })
     }
 
     @Test fun sameNumberOfSuggestionsIsNotProofOfCompletingAnUnresolvedShape() {

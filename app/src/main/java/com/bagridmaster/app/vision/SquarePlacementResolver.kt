@@ -21,6 +21,35 @@ internal object SquarePlacementResolver {
         } }
     }
 
+    /**
+     * A 2x2 fragment can occupy only one corner, hence exactly two perpendicular neighbours.
+     * When noisy contacts make the strict rules contradictory, rank complete footprints instead
+     * of falling through to the generic four-direction neighbour expansion.
+     */
+    fun resolveBestEffortTwoByTwo(
+        placements: List<ObjectPlacement>,
+        edges: List<FragmentEdgeEvidence>,
+    ): List<ObjectPlacement> {
+        if (placements.isEmpty() || edges.isEmpty() ||
+            placements.any { it.rows != 2 || it.columns != 2 }) return emptyList()
+        val ranked = placements.distinctBy { it.itemIndex to it.cells }.map { placement ->
+            val samples = edges.flatMap { edge -> listOf(
+                GridCell(edge.cell.row - 1, edge.cell.column) to edge.top,
+                GridCell(edge.cell.row, edge.cell.column + 1) to edge.right,
+                GridCell(edge.cell.row + 1, edge.cell.column) to edge.bottom,
+                GridCell(edge.cell.row, edge.cell.column - 1) to edge.left,
+            ) }
+            val score = samples.sumOf { (cell, strength) ->
+                if (cell in placement.cells) strength else 1.0 - strength
+            } / samples.size.coerceAtLeast(1)
+            placement to score
+        }.sortedByDescending { it.second }
+        val best = ranked.firstOrNull() ?: return emptyList()
+        val runnerUp = ranked.getOrNull(1)?.second ?: 0.0
+        return if (best.second >= 0.56 && best.second - runnerUp >= 0.025) listOf(best.first)
+            else emptyList()
+    }
+
     private fun axis(negative: Double, positive: Double): Int? = when {
         negative >= 0.12 && positive >= 0.12 -> 0 // interior
         negative <= 0.04 && positive >= 0.12 -> -1 // first row/column

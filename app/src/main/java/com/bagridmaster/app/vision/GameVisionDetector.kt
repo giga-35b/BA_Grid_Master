@@ -30,6 +30,10 @@ data class FragmentEdgeEvidence(
     val cell: GridCell,
     val top: Double, val right: Double, val bottom: Double, val left: Double,
     val verticalHint: Double, val horizontalHint: Double,
+    val backgroundTop: Double = top,
+    val backgroundRight: Double = right,
+    val backgroundBottom: Double = bottom,
+    val backgroundLeft: Double = left,
 )
 
 enum class BoardCellState {
@@ -247,9 +251,16 @@ class GameVisionDetector : FrameGeometryDetector {
         // Seed selection is deliberately high precision. The shared pixels outside these obvious
         // fragments teach the opened-cell background once; no second learning pass is performed.
         val seedCoordinates = buildSet {
-            if (!adaptiveCoveredTheme) return@buildSet
+
             for (row in 0 until BOARD_ROWS) for (column in 0 until BOARD_COLUMNS) {
                 val evidence = rawCells[row][column]
+                // A confidently open empty cell is direct background evidence. Strong fragment
+                // cells contribute their non-object pixels, so two complementary sources are
+                // enough even on the legacy single-colour board theme.
+                if (!adaptiveCoveredTheme && evidence.state == BoardCellState.OPEN_EMPTY) {
+                    add(row to column)
+                    continue
+                }
                 val presence = evidence.presence
                 val strongColour = presence.chromaticRatio >= 0.075
                 val strongPaleShape = evidence.foregroundCoverage >= 0.10 && presence.unexplainedRatio < 0.25
@@ -267,6 +278,16 @@ class GameVisionDetector : FrameGeometryDetector {
         }
         val openedBackground = OpenCellBackgroundModel.learn(frame,
             seedCoordinates.map { (row, column) -> regions[row][column] })
+        // Re-evaluate the four borders after learning the board-local background. This is still
+        // one pass: classification and edge evidence consume the same model without relearning.
+        val edgeCells = Array(BOARD_ROWS) { row -> Array(BOARD_COLUMNS) { column ->
+            val evidence = rawCells[row][column]
+            if (openedBackground == null || openedBackground.confidence < 0.60) evidence else {
+                val contacts = AdaptiveBoundaryContacts.measure(frame, regions[row][column], openedBackground)
+                evidence.copy(topEdge = contacts[0], rightEdge = contacts[1],
+                    bottomEdge = contacts[2], leftEdge = contacts[3])
+            }
+        } }
         val backgroundMeasurements = Array(BOARD_ROWS) { row -> Array(BOARD_COLUMNS) { column ->
             openedBackground?.measure(frame, regions[row][column])
         } }
@@ -291,7 +312,7 @@ class GameVisionDetector : FrameGeometryDetector {
         val classification = Array(BOARD_ROWS) { arrayOfNulls<CellClassificationEvidence>(BOARD_COLUMNS) }
         val cells = Array(BOARD_ROWS) { row ->
             Array(BOARD_COLUMNS) { column ->
-                val evidence = rawCells[row][column]
+                val evidence = edgeCells[row][column]
                 val repeatedCover = evidence.tileSmoothness >= 0.72 && colourBin(evidence) in recurringBins
                 val measurement = backgroundMeasurements[row][column]
                 val patternScore = coveredPattern?.score(patternCells[row * BOARD_COLUMNS + column]) ?: 0.0
@@ -362,8 +383,13 @@ class GameVisionDetector : FrameGeometryDetector {
         return BoardEvidence(
             contentScore = contentScore,
             fragmentEdges = cells.flatMapIndexed { row, rowCells -> rowCells.mapIndexedNotNull { column, cell ->
-                if (cell.state != BoardCellState.OPEN_FRAGMENT) null else FragmentEdgeEvidence(GridCell(row, column),
-                    cell.topEdge, cell.rightEdge, cell.bottomEdge, cell.leftEdge, cell.verticalAxisHint, cell.horizontalAxisHint)
+                if (cell.state != BoardCellState.OPEN_FRAGMENT) null else {
+                    val raw = rawCells[row][column]
+                    FragmentEdgeEvidence(GridCell(row, column),
+                        raw.topEdge, raw.rightEdge, raw.bottomEdge, raw.leftEdge,
+                        cell.verticalAxisHint, cell.horizontalAxisHint,
+                        cell.topEdge, cell.rightEdge, cell.bottomEdge, cell.leftEdge)
+                }
             } },
             cells = cells.flatMapIndexed { row, rowCells ->
                 rowCells.mapIndexed { column, evidence ->

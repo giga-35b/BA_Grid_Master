@@ -17,6 +17,10 @@ internal class OpenCellBackgroundModel private constructor(
         val residualChangeRatio: Double,
     )
 
+    /** True when a pixel belongs to the opened-cell background palette learned for this board. */
+    fun matches(colour: IntArray, tolerance: Int = MATCH_DISTANCE): Boolean =
+        colours.any { reference -> colourDistance(colour, reference) <= tolerance }
+
     fun measure(frame: RgbaFrame, region: ScreenRegion): Measurement {
         val sampled = sample(frame, region)
         if (sampled.width <= 0 || sampled.colours.isEmpty()) return Measurement(0.0, 1.0, 1.0)
@@ -25,7 +29,7 @@ internal class OpenCellBackgroundModel private constructor(
         var changes = 0
         var comparisons = 0
         sampled.colours.forEachIndexed { index, colour ->
-            val matches = colours.any { reference -> colourDistance(colour, reference) <= MATCH_DISTANCE }
+            val matches = matches(colour)
             if (matches) background++ else residual[index] = true
             val x = index % sampled.width
             val y = index / sampled.width
@@ -69,8 +73,27 @@ internal class OpenCellBackgroundModel private constructor(
             val requiredCells = max(2, ceil(samples.size * 0.60).toInt())
             val commonBins = cellBins.flatten().groupingBy { it }.eachCount()
                 .filterValues { it >= requiredCells }.keys
-            if (commonBins.isEmpty()) return null
-            val representatives = commonBins.mapNotNull { code ->
+
+            // A fragment cell can contain local scenery colours absent from other opened cells.
+            // Treat only broad colours spanning at least three quadrants as local background;
+            // compact object artwork normally stays in one or two quadrants.
+            val regionalBins = samples.flatMap { sampled ->
+                val counts = sampled.colours.groupingBy(::bin).eachCount()
+                val quadrants = mutableMapOf<Int, MutableSet<Int>>()
+                sampled.colours.forEachIndexed { index, colour ->
+                    val x = index % sampled.width
+                    val y = index / sampled.width
+                    val quadrant = (if (x >= sampled.width / 2) 1 else 0) +
+                        (if (y >= sampled.height / 2) 2 else 0)
+                    quadrants.getOrPut(bin(colour)) { mutableSetOf() } += quadrant
+                }
+                counts.filter { (code, count) ->
+                    count >= sampled.colours.size / 10 && (quadrants[code]?.size ?: 0) >= 3
+                }.keys
+            }.toSet()
+            val modelBins = commonBins + regionalBins
+            if (modelBins.isEmpty()) return null
+            val representatives = modelBins.mapNotNull { code ->
                 val matching = samples.flatMap { it.colours.asIterable() }.filter { bin(it) == code }
                 if (matching.isEmpty()) null else IntArray(3) { channel ->
                     matching.map { it[channel] }.sorted()[matching.size / 2]
@@ -78,8 +101,11 @@ internal class OpenCellBackgroundModel private constructor(
             }.take(MAX_COLOURS)
             if (representatives.isEmpty()) return null
             val agreement = cellBins.count { bins -> commonBins.any { it in bins } }.toDouble() / samples.size
+            val regionalFallback = if (commonBins.isEmpty() && regionalBins.isNotEmpty()) 0.65 else 0.0
             return OpenCellBackgroundModel(representatives,
-                (0.45 + agreement * 0.45 + minOf(0.10, representatives.size * 0.01)).coerceIn(0.0, 1.0))
+                maxOf(regionalFallback,
+                    0.45 + agreement * 0.45 + minOf(0.10, representatives.size * 0.01))
+                    .coerceIn(0.0, 1.0))
         }
 
         private data class SampledCell(
