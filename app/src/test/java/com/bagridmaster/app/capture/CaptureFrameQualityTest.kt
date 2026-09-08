@@ -28,7 +28,7 @@ class CaptureFrameQualityTest {
     @Test fun acceptsAllDatasetFramesIncludingNonGameScreensForNormalCvRejection() {
         val root = sequenceOf(File("dataset"), File("../dataset")).first { it.isDirectory }
         val images = root.walkTopDown().filter { it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png") }.toList()
-        assertEquals(56, images.size)
+        assertEquals(58, images.size)
         images.forEach { file ->
             assertNull(file.name, CaptureFrameQuality.problem(LocalTemplateMatcherTest.readFrame(file.absolutePath)))
         }

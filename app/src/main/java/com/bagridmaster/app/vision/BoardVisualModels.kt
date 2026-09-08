@@ -51,6 +51,51 @@ internal class OpenCellBackgroundModel private constructor(
     }
 
     companion object {
+        /**
+         * Conservative one-cell fallback used only for boundary occupancy. The background group
+         * must dominate the cell and recur in every quadrant; compact sprite colours are excluded.
+         */
+        fun learnLocal(frame: RgbaFrame, region: ScreenRegion): OpenCellBackgroundModel? {
+            val sampled = sample(frame, region)
+            if (sampled.colours.isEmpty()) return null
+            val counts = sampled.colours.groupingBy(::bin).eachCount()
+            val quadrants = mutableMapOf<Int, MutableSet<Int>>()
+            sampled.colours.forEachIndexed { index, colour ->
+                val x = index % sampled.width
+                val y = index / sampled.width
+                val quadrant = (if (x >= sampled.width / 2) 1 else 0) +
+                    (if (y >= sampled.height / 2) 2 else 0)
+                quadrants.getOrPut(bin(colour)) { mutableSetOf() } += quadrant
+            }
+            val anchor = counts.entries
+                .filter { (code, count) ->
+                    count >= sampled.colours.size * LOCAL_ANCHOR_SUPPORT &&
+                        (quadrants[code]?.size ?: 0) == 4
+                }
+                .maxByOrNull { it.value }?.key ?: return null
+            val paletteBins = counts.entries
+                .filter { (code, count) ->
+                    count >= max(2, sampled.colours.size / 100) &&
+                        (quadrants[code]?.size ?: 0) >= 3 &&
+                        binDistance(code, anchor) <= LOCAL_BIN_RADIUS
+                }
+                .sortedByDescending { it.value }
+                .take(LOCAL_MAX_COLOURS)
+                .map { it.key }
+            val support = counts.filterKeys { it in paletteBins }.values.sum().toDouble() /
+                sampled.colours.size.coerceAtLeast(1)
+            if (paletteBins.isEmpty() || support < LOCAL_GROUP_SUPPORT) return null
+            val representatives = paletteBins.mapNotNull { code ->
+                val matching = sampled.colours.filter { bin(it) == code }
+                if (matching.isEmpty()) null else IntArray(3) { channel ->
+                    matching.map { it[channel] }.sorted()[matching.size / 2]
+                }
+            }
+            if (representatives.isEmpty()) return null
+            return OpenCellBackgroundModel(representatives,
+                (0.55 + support * 0.32).coerceIn(0.60, 0.78))
+        }
+
         fun learn(frame: RgbaFrame, regions: List<ScreenRegion>): OpenCellBackgroundModel? {
             if (regions.size < 2) return null
             val samples = regions.map { sample(frame, it) }.filter { it.colours.isNotEmpty() }
@@ -133,6 +178,12 @@ internal class OpenCellBackgroundModel private constructor(
             return SampledCell(width, height, colours)
         }
 
+        private fun binDistance(left: Int, right: Int): Int = max(
+            abs((left shr 8 and 0xF) - (right shr 8 and 0xF)),
+            max(abs((left shr 4 and 0xF) - (right shr 4 and 0xF)),
+                abs((left and 0xF) - (right and 0xF))),
+        )
+
         private fun bin(colour: IntArray): Int =
             (colour[0] / BIN_SIZE shl 8) or (colour[1] / BIN_SIZE shl 4) or (colour[2] / BIN_SIZE)
 
@@ -144,6 +195,10 @@ internal class OpenCellBackgroundModel private constructor(
         private const val MATCH_DISTANCE = 38
         private const val CHANGE_DISTANCE = 24
         private const val MAX_COLOURS = 18
+        private const val LOCAL_ANCHOR_SUPPORT = 0.12
+        private const val LOCAL_GROUP_SUPPORT = 0.45
+        private const val LOCAL_BIN_RADIUS = 3
+        private const val LOCAL_MAX_COLOURS = 12
     }
 }
 

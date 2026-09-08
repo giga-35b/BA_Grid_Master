@@ -26,6 +26,21 @@ data class GameVisionDetection(
     val strictSquareAnchorCount: Int = 0,
 )
 
+data class BoundaryOccupancySide(
+    val coverage: Double = 0.0,
+    val longestRun: Double = 0.0,
+    val depthPersistence: Double = 0.0,
+) {
+    val score: Double get() = longestRun * 0.70 + coverage * 0.20 + depthPersistence * 0.10
+}
+
+data class FragmentBoundaryOccupancy(
+    val top: BoundaryOccupancySide = BoundaryOccupancySide(),
+    val right: BoundaryOccupancySide = BoundaryOccupancySide(),
+    val bottom: BoundaryOccupancySide = BoundaryOccupancySide(),
+    val left: BoundaryOccupancySide = BoundaryOccupancySide(),
+)
+
 data class FragmentEdgeEvidence(
     val cell: GridCell,
     val top: Double, val right: Double, val bottom: Double, val left: Double,
@@ -34,6 +49,11 @@ data class FragmentEdgeEvidence(
     val backgroundRight: Double = right,
     val backgroundBottom: Double = bottom,
     val backgroundLeft: Double = left,
+    val assistedTop: Double = backgroundTop,
+    val assistedRight: Double = backgroundRight,
+    val assistedBottom: Double = backgroundBottom,
+    val assistedLeft: Double = backgroundLeft,
+    val occupancy: FragmentBoundaryOccupancy = FragmentBoundaryOccupancy(),
 )
 
 enum class BoardCellState {
@@ -385,10 +405,19 @@ class GameVisionDetector : FrameGeometryDetector {
             fragmentEdges = cells.flatMapIndexed { row, rowCells -> rowCells.mapIndexedNotNull { column, cell ->
                 if (cell.state != BoardCellState.OPEN_FRAGMENT) null else {
                     val raw = rawCells[row][column]
+                    val assisted = if (openedBackground != null && openedBackground.confidence >= 0.60) {
+                        AdaptiveBoundaryContacts.measureShapeAssisted(
+                            frame, regions[row][column], openedBackground)
+                    } else {
+                        doubleArrayOf(cell.topEdge, cell.rightEdge, cell.bottomEdge, cell.leftEdge)
+                    }
+                    val occupancy = AdaptiveBoundaryContacts.measureOccupancy(
+                        frame, regions[row][column], openedBackground)
                     FragmentEdgeEvidence(GridCell(row, column),
                         raw.topEdge, raw.rightEdge, raw.bottomEdge, raw.leftEdge,
                         cell.verticalAxisHint, cell.horizontalAxisHint,
-                        cell.topEdge, cell.rightEdge, cell.bottomEdge, cell.leftEdge)
+                        cell.topEdge, cell.rightEdge, cell.bottomEdge, cell.leftEdge,
+                        assisted[0], assisted[1], assisted[2], assisted[3], occupancy)
                 }
             } },
             cells = cells.flatMapIndexed { row, rowCells ->

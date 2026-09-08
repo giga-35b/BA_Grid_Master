@@ -28,7 +28,7 @@ class FullDatasetRegressionTest {
             Regex("(Screenshot_.*?\\.jpg)\\s+(.*)").find(line)?.let { it.groupValues[1] to it.groupValues[2] }
         }.toMap()
         val images = root.walkTopDown().filter { it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png") }.sortedBy { it.path }.toList()
-        assertEquals("Update coverage when adding dataset images", 56, images.size)
+        assertEquals("Update coverage when adding dataset images", 58, images.size)
         val opened = mutableSetOf<GridCell>()
         var valid = 0; var rejected = 0; var matched = 0; var fallback = 0; var finishCards = 0; var selectionDifferences = 0
         for (file in images) {
@@ -133,7 +133,7 @@ class FullDatasetRegressionTest {
             println("DATASET ${file.name}: board=OK Finish=${cards.filter { it.isFinished }.map { it.index + 1 }} lit=${lit.size} matched=${lit.count { it.localMatch?.accepted == true }} suggestions=${completion.recommendations.map { cellAddress(it.row, it.column) }}")
         }
         println("DATASET TOTAL images=${images.size} valid=$valid rejected=$rejected FinishCards=$finishCards matched=$matched fallback=$fallback selectionDifferences=$selectionDifferences")
-        assertEquals(51, valid); assertEquals(5, rejected)
+        assertEquals(53, valid); assertEquals(5, rejected)
         assertEquals("No neighboring-border selection errors", 0, selectionDifferences)
         if (calibrated) assertTrue("dataset must establish at least one trusted profile", tracker.profiles.isNotEmpty())
     }

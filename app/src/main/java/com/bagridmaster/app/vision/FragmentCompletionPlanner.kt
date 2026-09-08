@@ -169,15 +169,39 @@ class FragmentCompletionPlanner {
                 return@map item.copy(completionEvidence = "情况1：可靠匹配，本次可完整补开；探索将使用该物品的摆法与数量，不改写实际格子状态")
             }
             val rawEvidence = edges.filter { it.cell in item.observedCells }
-            val isKnownTwoByTwo = placements.all { it.rows == 2 && it.columns == 2 } &&
-                placements.map { it.itemIndex }.distinct().size == 1
-            // Background subtraction can erase pale real edges. Use it only when a confirmed 2x2
-            // shape can cross-check the two perpendicular continuation directions.
-            val evidence = if (isKnownTwoByTwo) rawEvidence.map { edge -> edge.copy(
+            val oneKnownType = placements.map { it.itemIndex }.distinct().size == 1
+            val isKnownSquare = oneKnownType && placements.all {
+                it.rows == it.columns && it.rows in 2..3
+            }
+            val isKnownTwoByTwo = oneKnownType &&
+                placements.all { it.rows == 2 && it.columns == 2 }
+            // General classification keeps the strict 40% gate. Only a confirmed 2x2/3x3 shape
+            // may consult continuous background residuals together with clean opposite edges.
+            val strictEvidence = if (isKnownSquare) rawEvidence.map { edge -> edge.copy(
                 top = edge.backgroundTop, right = edge.backgroundRight,
                 bottom = edge.backgroundBottom, left = edge.backgroundLeft,
             ) } else rawEvidence
-            val squarePlacements = SquarePlacementResolver.resolve(placements, evidence)
+            val assistedEvidence = if (isKnownSquare) rawEvidence.map { edge -> edge.copy(
+                top = edge.assistedTop, right = edge.assistedRight,
+                bottom = edge.assistedBottom, left = edge.assistedLeft,
+            ) } else strictEvidence
+            val occupancyPlacements = if (isKnownSquare) {
+                SquarePlacementResolver.resolveByOccupancy(placements, rawEvidence)
+            } else emptyList()
+            if (occupancyPlacements.isNotEmpty() &&
+                occupancyPlacements.map { it.cells }.distinct().size == 1 &&
+                occupancyPlacements.first().cells.none { states[it] == BoardCellState.UNCERTAIN }) {
+                val footprint = occupancyPlacements.first().cells
+                footprint.forEach { suggestOwn(it, 0.90, "正方形边缘连续覆盖定位补全 ${item.id}") }
+                fullCompletions += PlannedLitObject(item.id, occupancyPlacements.first().itemIndex,
+                    listOf(footprint), "情况2：边缘连续覆盖长度确定正方形摆法")
+                val addresses = footprint.sortedWith(compareBy({ it.row }, { it.column }))
+                    .joinToString(" ") { cellAddress(it.row, it.column) }
+                return@map item.copy(completionEvidence =
+                    "情况2：边缘覆盖长度确定唯一正方形摆法；推定占格：$addresses；" +
+                        occupancyText(rawEvidence))
+            }
+            val squarePlacements = SquarePlacementResolver.resolve(placements, strictEvidence)
             if (squarePlacements.isNotEmpty() && squarePlacements.map { it.cells }.distinct().size == 1 &&
                 squarePlacements.first().cells.none { states[it] == BoardCellState.UNCERTAIN }) {
                 val footprint = squarePlacements.first().cells
@@ -187,10 +211,28 @@ class FragmentCompletionPlanner {
                 val decision = if (types.size == 1) "情况2：正方形方向确定唯一完整摆法，可完整补开"
                     else "情况3：正方形范围可补开，但物品种类不唯一，暂停探索"
                 val addresses = footprint.sortedWith(compareBy({ it.row }, { it.column })).joinToString(" ") { cellAddress(it.row, it.column) }
-                return@map item.copy(completionEvidence = "$decision；推定占格：$addresses；不依赖贴图旋转；${edgeText(evidence)}")
+                return@map item.copy(completionEvidence = "$decision；推定占格：$addresses；不依赖贴图旋转；${edgeText(strictEvidence)}")
+            }
+            if (isKnownSquare) {
+                val assistedSquare = SquarePlacementResolver.resolveShapeAssisted(
+                    placements, assistedEvidence)
+                if (assistedSquare.isNotEmpty() &&
+                    assistedSquare.map { it.cells }.distinct().size == 1 &&
+                    assistedSquare.first().cells.none { states[it] == BoardCellState.UNCERTAIN }) {
+                    val footprint = assistedSquare.first().cells
+                    footprint.forEach { suggestOwn(it, 0.80, "正方形弱边缘定位补全 ${item.id}") }
+                    fullCompletions += PlannedLitObject(item.id, assistedSquare.first().itemIndex,
+                        listOf(footprint), "情况2：反方向低响应或明显弱于主方向，结合形状确定正方形摆法")
+                    val addresses = footprint.sortedWith(compareBy({ it.row }, { it.column }))
+                        .joinToString(" ") { cellAddress(it.row, it.column) }
+                    return@map item.copy(completionEvidence =
+                        "情况2：反方向接近背景或明显弱于主方向，结合形状辅助边缘确定唯一摆法；推定占格：$addresses；" +
+                            "严格${edgeText(strictEvidence)}；辅助${edgeText(assistedEvidence)}")
+                }
             }
             if (isKnownTwoByTwo) {
-                val rankedSquare = SquarePlacementResolver.resolveBestEffortTwoByTwo(placements, evidence)
+                val rankedSquare = SquarePlacementResolver.resolveBestEffortTwoByTwo(
+                    placements, strictEvidence)
                 if (rankedSquare.size == 1 && rankedSquare.single().cells.none {
                         states[it] == BoardCellState.UNCERTAIN
                     }) {
@@ -201,11 +243,12 @@ class FragmentCompletionPlanner {
                     val addresses = footprint.sortedWith(compareBy({ it.row }, { it.column }))
                         .joinToString(" ") { cellAddress(it.row, it.column) }
                     return@map item.copy(completionEvidence =
-                        "情况2：2×2物品仅允许两个垂直方向延伸，按整体边缘证据选择占优角；推定占格：$addresses；${edgeText(evidence)}")
+                        "情况2：2×2物品仅允许两个垂直方向延伸，按整体边缘证据选择占优角；推定占格：$addresses；${edgeText(strictEvidence)}")
                 }
                 return@map item.copy(completionEvidence =
-                    "情况3：2×2物品的边缘证据冲突或优势不足，不退回四向相邻扩展；${edgeText(evidence)}")
+                    "情况3：2×2物品的边缘证据冲突或优势不足，不退回四向相邻扩展；${edgeText(strictEvidence)}")
             }
+            val evidence = strictEvidence
             // Actual boundary contact outranks the silhouette's principal axis. A curved
             // head may be horizontally wide while its neck continues down through the cell edge.
             val hasContact = evidence.any { maxOf(it.top, it.right, it.bottom, it.left) >= 0.12 }
@@ -270,6 +313,14 @@ class FragmentCompletionPlanner {
     }
 
     private fun percent(value: Double) = "${(value * 100).toInt()}%"
+
+    private fun occupancyText(evidence: List<FragmentEdgeEvidence>) = evidence.joinToString("；") {
+        fun side(value: BoundaryOccupancySide) =
+            "${percent(value.coverage)}/连续${percent(value.longestRun)}"
+        "${cellAddress(it.cell.row, it.cell.column)}边缘覆盖 " +
+            "上${side(it.occupancy.top)} 右${side(it.occupancy.right)} " +
+            "下${side(it.occupancy.bottom)} 左${side(it.occupancy.left)}"
+    }
 
     private fun edgeText(evidence: List<FragmentEdgeEvidence>) = evidence.joinToString("；") {
         "${cellAddress(it.cell.row, it.cell.column)}边界接触 上${percent(it.top)} 右${percent(it.right)} 下${percent(it.bottom)} 左${percent(it.left)}"

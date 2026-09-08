@@ -17,14 +17,113 @@ internal object AdaptiveBoundaryContacts {
         frame: RgbaFrame,
         region: ScreenRegion,
         background: OpenCellBackgroundModel? = null,
+    ): DoubleArray = measure(frame, region, background, STRICT_CONTACT_GATE)
+
+    /**
+     * Keeps sub-threshold residual evidence for a known square shape. This must never be used as
+     * general fragment/presence evidence: a legal 2x2/3x3 footprint and its clean opposite edges
+     * reject decorative background variation later in the planner.
+     */
+    fun measureShapeAssisted(
+        frame: RgbaFrame,
+        region: ScreenRegion,
+        background: OpenCellBackgroundModel,
+    ): DoubleArray = measure(frame, region, background, 0.0)
+
+    /** Measures how much sprite foreground continuously occupies each cell boundary. */
+    fun measureOccupancy(
+        frame: RgbaFrame,
+        region: ScreenRegion,
+        background: OpenCellBackgroundModel? = null,
+    ): FragmentBoundaryOccupancy {
+        val safe = ScreenRegion(region.left.coerceIn(0, frame.width - 1),
+            region.top.coerceIn(0, frame.height - 1), region.right.coerceIn(1, frame.width),
+            region.bottom.coerceIn(1, frame.height))
+        if (safe.width < 12 || safe.height < 12) return FragmentBoundaryOccupancy()
+        val model = background?.takeIf { it.confidence >= 0.60 }
+            ?: OpenCellBackgroundModel.learnLocal(frame, safe)
+            ?: return FragmentBoundaryOccupancy()
+        return FragmentBoundaryOccupancy(
+            top = occupancySide(frame, safe, 0, model),
+            right = occupancySide(frame, safe, 1, model),
+            bottom = occupancySide(frame, safe, 2, model),
+            left = occupancySide(frame, safe, 3, model),
+        )
+    }
+
+    private fun occupancySide(
+        frame: RgbaFrame,
+        region: ScreenRegion,
+        side: Int,
+        background: OpenCellBackgroundModel,
+    ): BoundaryOccupancySide {
+        val perpendicular = if (side % 2 == 0) region.height else region.width
+        val tangent = if (side % 2 == 0) region.width else region.height
+        val borderInset = max(2, (perpendicular * 0.025f).roundToInt())
+        val depthStep = max(1, (perpendicular * 0.018f).roundToInt())
+        val depths = (0 until OCCUPANCY_DEPTH_LINES).map { borderInset + it * depthStep }
+            .filter { it < perpendicular / 5 }
+        val tangentInset = max(3, (tangent * 0.05f).roundToInt())
+        val positions = (tangentInset until tangent - tangentInset step OCCUPANCY_SAMPLE_STEP).toList()
+        if (depths.size < 2 || positions.size < 5) return BoundaryOccupancySide()
+        val votes = IntArray(positions.size)
+        positions.forEachIndexed { index, position ->
+            for (depth in depths) {
+                val x = when (side) {
+                    1 -> region.right - 1 - depth
+                    3 -> region.left + depth
+                    else -> region.left + position
+                }
+                val y = when (side) {
+                    0 -> region.top + depth
+                    2 -> region.bottom - 1 - depth
+                    else -> region.top + position
+                }
+                if (!background.matches(rgb(frame, x, y), OCCUPANCY_BACKGROUND_DISTANCE)) votes[index]++
+            }
+        }
+        val requiredVotes = (depths.size + 1) / 2
+        val occupied = BooleanArray(votes.size) { votes[it] >= requiredVotes }
+        // Close a one-sample antialiasing gap, but do not join separated background decorations.
+        for (index in 1 until occupied.lastIndex) {
+            if (!occupied[index] && occupied[index - 1] && occupied[index + 1]) occupied[index] = true
+        }
+        val occupiedCount = occupied.count { it }
+        if (occupiedCount == 0) return BoundaryOccupancySide()
+        var longest = 0
+        var run = 0
+        occupied.forEach { present ->
+            if (present) {
+                run++
+                longest = max(longest, run)
+            } else run = 0
+        }
+        val count = occupied.size.toDouble()
+        val persistence = occupied.indices.filter { occupied[it] }
+            .map { votes[it].toDouble() / depths.size }
+            .average()
+        return BoundaryOccupancySide(
+            coverage = occupiedCount / count,
+            longestRun = longest / count,
+            depthPersistence = persistence,
+        )
+    }
+
+    private fun measure(
+        frame: RgbaFrame,
+        region: ScreenRegion,
+        background: OpenCellBackgroundModel?,
+        minimumPersistent: Double,
     ): DoubleArray {
         val safe = ScreenRegion(region.left.coerceIn(0, frame.width - 1),
             region.top.coerceIn(0, frame.height - 1), region.right.coerceIn(1, frame.width),
             region.bottom.coerceIn(1, frame.height))
         if (safe.width < 12 || safe.height < 12) return DoubleArray(4)
         return doubleArrayOf(
-            side(frame, safe, 0, background), side(frame, safe, 1, background),
-            side(frame, safe, 2, background), side(frame, safe, 3, background),
+            side(frame, safe, 0, background, minimumPersistent),
+            side(frame, safe, 1, background, minimumPersistent),
+            side(frame, safe, 2, background, minimumPersistent),
+            side(frame, safe, 3, background, minimumPersistent),
         )
     }
 
@@ -33,6 +132,7 @@ internal object AdaptiveBoundaryContacts {
         region: ScreenRegion,
         side: Int,
         background: OpenCellBackgroundModel?,
+        minimumPersistent: Double,
     ): Double {
         val perpendicular = if (side % 2 == 0) region.height else region.width
         val tangent = if (side % 2 == 0) region.width else region.height
@@ -76,7 +176,7 @@ internal object AdaptiveBoundaryContacts {
         // actually reaching the border (the failure mode of the old 22% band). Only persistent,
         // conspicuous structure becomes positive continuation evidence; weaker values remain an
         // unknown/clean edge rather than being promoted by the planner's much lower 12% gate.
-        return persistent.takeIf { it >= 0.40 }?.coerceIn(0.0, 1.0) ?: 0.0
+        return persistent.takeIf { it >= minimumPersistent }?.coerceIn(0.0, 1.0) ?: 0.0
     }
 
     private fun residualSupport(
@@ -119,6 +219,10 @@ internal object AdaptiveBoundaryContacts {
     }
 
     private const val EDGE_BACKGROUND_DISTANCE = 24
+    private const val STRICT_CONTACT_GATE = 0.40
+    private const val OCCUPANCY_BACKGROUND_DISTANCE = 42
+    private const val OCCUPANCY_DEPTH_LINES = 4
+    private const val OCCUPANCY_SAMPLE_STEP = 2
 
     private fun rgb(frame: RgbaFrame, x: Int, y: Int): IntArray {
         val safeX = x.coerceIn(0, frame.width - 1)

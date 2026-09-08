@@ -79,11 +79,120 @@ class FragmentCompletionPlannerTest {
             BoardCellState.OPEN_FRAGMENT else BoardCellState.CLOSED) }
         val result = FragmentCompletionPlanner().complete(board, state, listOf(card(2, 2)),
             listOf(item.copy(observedCells = setOf(fragment))),
-            listOf(FragmentEdgeEvidence(fragment, 0.41, 0.69, 0.60, 0.75, 0.0, 0.0)))
+            listOf(FragmentEdgeEvidence(fragment, 0.41, 0.50, 0.60, 0.75, 0.0, 0.0)))
         assertEquals(setOf("A4", "A5", "B5"),
             result.recommendations.map { cellAddress(it.row, it.column) }.toSet())
         assertEquals(1, result.fullCompletions.size)
         assertTrue(result.recommendations.all { it.strategy.contains("2×2") })
+    }
+
+    @Test fun clusteredFourHighEdgesDoNotForceTwoByTwoCorner() {
+        val edge = FragmentEdgeEvidence(source, 0.61, 0.83, 0.68, 0.65, 0.0, 0.0)
+        val result = FragmentCompletionPlanner().complete(
+            board, cells, listOf(card(2, 2)), listOf(item), listOf(edge))
+        assertTrue(result.recommendations.isEmpty())
+        assertTrue(result.fullCompletions.isEmpty())
+        assertTrue(result.objects.single().completionEvidence.contains("优势不足"))
+    }
+
+    @Test fun edgeOccupancyLocatesThreeByThreeCornerSideAndCentre() {
+        val strong = BoundaryOccupancySide(0.72, 0.64, 0.90)
+        val clean = BoundaryOccupancySide(0.03, 0.03, 0.50)
+        val origin = GridCell(1, 3)
+        val cases = listOf(
+            Triple(GridCell(1, 3), FragmentBoundaryOccupancy(clean, strong, strong, clean), origin),
+            Triple(GridCell(1, 4), FragmentBoundaryOccupancy(clean, strong, strong, strong), origin),
+            Triple(GridCell(2, 4), FragmentBoundaryOccupancy(strong, strong, strong, strong), origin),
+        )
+        for ((fragment, occupancy, expectedOrigin) in cases) {
+            val state = cells.map { it.copy(state = if (GridCell(it.row, it.column) == fragment)
+                BoardCellState.OPEN_FRAGMENT else BoardCellState.CLOSED) }
+            val edge = FragmentEdgeEvidence(fragment, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                occupancy = occupancy)
+            val result = FragmentCompletionPlanner().complete(board, state, listOf(card(3, 3)),
+                listOf(item.copy(observedCells = setOf(fragment))), listOf(edge))
+            val footprint = (0 until 3).flatMap { row -> (0 until 3).map { column ->
+                GridCell(expectedOrigin.row + row, expectedOrigin.column + column)
+            } }.toSet()
+            assertEquals(footprint - fragment, result.recommendations.map { GridCell(it.row, it.column) }.toSet())
+            assertEquals(1, result.fullCompletions.size)
+            assertTrue(result.objects.single().completionEvidence.contains("边缘覆盖长度"))
+        }
+    }
+
+    @Test fun weakTwoByTwoEdgesUseCleanOppositesToChooseCorner() {
+        val edge = FragmentEdgeEvidence(source, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            assistedTop = 0.394, assistedRight = 0.591,
+            assistedBottom = 0.0, assistedLeft = 0.0)
+        val result = FragmentCompletionPlanner().complete(
+            board, cells, listOf(card(2, 2)), listOf(item), listOf(edge))
+        assertEquals(setOf("B1", "C1", "C2"),
+            result.recommendations.map { cellAddress(it.row, it.column) }.toSet())
+        assertEquals(1, result.fullCompletions.size)
+        assertTrue(result.objects.single().completionEvidence.contains("反方向接近背景"))
+    }
+
+    @Test fun weakThreeByThreeEdgesUseCleanOppositesToChooseCorner() {
+        val fragment = GridCell(3, 3)
+        val state = cells.map { it.copy(state = if (GridCell(it.row, it.column) == fragment)
+            BoardCellState.OPEN_FRAGMENT else BoardCellState.CLOSED) }
+        val edge = FragmentEdgeEvidence(fragment, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            assistedTop = 0.11, assistedRight = 0.10,
+            assistedBottom = 0.0, assistedLeft = 0.0)
+        val result = FragmentCompletionPlanner().complete(board, state, listOf(card(3, 3)),
+            listOf(item.copy(observedCells = setOf(fragment))), listOf(edge))
+        val expected = setOf("D2", "E2", "F2", "D3", "E3", "F3", "E4", "F4")
+        assertEquals(expected, result.recommendations.map { cellAddress(it.row, it.column) }.toSet())
+        assertEquals(1, result.fullCompletions.size)
+    }
+
+    @Test fun relativeGapDeterminesTwoByTwoCornerEvenWhenOppositesAreNotClean() {
+        val edge = FragmentEdgeEvidence(source, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            assistedTop = 0.55, assistedRight = 0.61,
+            assistedBottom = 0.20, assistedLeft = 0.18)
+        val result = FragmentCompletionPlanner().complete(
+            board, cells, listOf(card(2, 2)), listOf(item), listOf(edge))
+        assertEquals(setOf("B1", "C1", "C2"),
+            result.recommendations.map { cellAddress(it.row, it.column) }.toSet())
+        assertEquals(1, result.fullCompletions.size)
+    }
+
+    @Test fun relativeGapAndBidirectionalAxisLocateThreeByThreeSide() {
+        val fragment = GridCell(2, 3)
+        val state = cells.map { it.copy(state = if (GridCell(it.row, it.column) == fragment)
+            BoardCellState.OPEN_FRAGMENT else BoardCellState.CLOSED) }
+        val edge = FragmentEdgeEvidence(fragment, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            assistedTop = 0.32, assistedRight = 0.55,
+            assistedBottom = 0.35, assistedLeft = 0.20)
+        val result = FragmentCompletionPlanner().complete(board, state, listOf(card(3, 3)),
+            listOf(item.copy(observedCells = setOf(fragment))), listOf(edge))
+        val expected = setOf("D2", "E2", "F2", "E3", "F3", "D4", "E4", "F4")
+        assertEquals(expected, result.recommendations.map { cellAddress(it.row, it.column) }.toSet())
+        assertEquals(1, result.fullCompletions.size)
+    }
+
+    @Test fun balancedFourWayEvidenceLocatesThreeByThreeCentre() {
+        val fragment = GridCell(2, 3)
+        val state = cells.map { it.copy(state = if (GridCell(it.row, it.column) == fragment)
+            BoardCellState.OPEN_FRAGMENT else BoardCellState.CLOSED) }
+        val edge = FragmentEdgeEvidence(fragment, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            assistedTop = 0.30, assistedRight = 0.31,
+            assistedBottom = 0.32, assistedLeft = 0.29)
+        val result = FragmentCompletionPlanner().complete(board, state, listOf(card(3, 3)),
+            listOf(item.copy(observedCells = setOf(fragment))), listOf(edge))
+        val expected = setOf("C2", "D2", "E2", "C3", "E3", "C4", "D4", "E4")
+        assertEquals(expected, result.recommendations.map { cellAddress(it.row, it.column) }.toSet())
+        assertEquals(1, result.fullCompletions.size)
+    }
+
+    @Test fun oneAssistedAxisAndCleanUnknownAxisDoNotGuessSquarePlacement() {
+        val edge = FragmentEdgeEvidence(source, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            assistedTop = 0.0, assistedRight = 0.30,
+            assistedBottom = 0.0, assistedLeft = 0.0)
+        val result = FragmentCompletionPlanner().complete(
+            board, cells, listOf(card(2, 2)), listOf(item), listOf(edge))
+        assertTrue(result.recommendations.isEmpty())
+        assertTrue(result.fullCompletions.isEmpty())
     }
 
     @Test fun sameNumberOfSuggestionsIsNotProofOfCompletingAnUnresolvedShape() {

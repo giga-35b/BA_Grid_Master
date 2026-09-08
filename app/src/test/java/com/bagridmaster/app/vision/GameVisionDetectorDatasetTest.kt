@@ -1,6 +1,11 @@
 package com.bagridmaster.app.vision
 
 import com.bagridmaster.app.analysis.BoardStrategySolver
+import com.bagridmaster.app.analysis.BoardObjectObservation
+import com.bagridmaster.app.analysis.BoardObjectPhase
+import com.bagridmaster.app.analysis.GridCell
+import com.bagridmaster.app.analysis.ScreenRegion
+import com.bagridmaster.app.analysis.cellAddress
 import com.bagridmaster.app.model.StrategyAlgorithm
 
 import java.io.File
@@ -48,6 +53,93 @@ class GameVisionDetectorDatasetTest {
         assertTrue("B4 backgroundRight=${edge.backgroundRight}", edge.backgroundRight < 0.12)
         assertTrue("B4 backgroundBottom=${edge.backgroundBottom}", edge.backgroundBottom >= 0.12)
         assertTrue("B4 backgroundLeft=${edge.backgroundLeft}", edge.backgroundLeft >= 0.12)
+    }
+
+    @Test
+    fun twoByTwoWeakMainEdgeAndCleanOppositesDetermineTheCorner() {
+        val frame = loadFrame(resolveFile("dataset/regressions/two-by-two-clean-opposites-20260908.png"))
+        val detector = GameVisionDetector()
+        val raw = checkNotNull(detector.analyze(frame))
+        val result = checkNotNull(detector.reinspect(
+            frame,
+            raw,
+            ScreenRegion(1148, 261, 2189, 839),
+        ))
+        val edge = checkNotNull(result.fragmentEdges.singleOrNull {
+            it.cell.row == 1 && it.cell.column == 7
+        }) { "H2 was not retained as the sole lit fragment: ${result.fragmentEdges}" }
+        assertTrue("strict top should remain below the generic gate: ${edge.backgroundTop}",
+            edge.backgroundTop < 0.12)
+        assertTrue("assisted top=${edge.assistedTop}", edge.assistedTop >= 0.30)
+        assertTrue("assisted right=${edge.assistedRight}", edge.assistedRight >= 0.45)
+        assertTrue("assisted bottom=${edge.assistedBottom}", edge.assistedBottom <= 0.11)
+        assertTrue("assisted left=${edge.assistedLeft}", edge.assistedLeft <= 0.06)
+
+        val lit = BoardObjectObservation(
+            id = "L1",
+            phase = BoardObjectPhase.LIT,
+            observedCells = setOf(GridCell(1, 7)),
+            possibleItemIndices = listOf(1),
+            confidence = 0.93,
+            evidence = "dataset regression",
+        )
+        val completion = FragmentCompletionPlanner().complete(
+            result.geometry.board,
+            result.boardCells,
+            result.itemCards,
+            listOf(lit),
+            result.fragmentEdges,
+        )
+        assertEquals(setOf("H1", "I1", "I2"), completion.recommendations
+            .map { cellAddress(it.row, it.column) }.toSet())
+        assertEquals(1, completion.fullCompletions.size)
+        assertTrue(completion.objects.single().completionEvidence.contains("反方向接近背景"))
+    }
+
+    @Test
+    fun continuousEdgeOccupancyBeatsFourHighTextureScores() {
+        val frame = loadFrame(resolveFile("dataset/regressions/two-by-two-edge-occupancy-20260909.png"))
+        val detector = GameVisionDetector()
+        val raw = checkNotNull(detector.analyze(frame))
+        val result = checkNotNull(detector.reinspect(
+            frame,
+            raw,
+            ScreenRegion(1148, 261, 2189, 839),
+        ))
+        val edge = checkNotNull(result.fragmentEdges.singleOrNull {
+            it.cell.row == 1 && it.cell.column == 3
+        }) { "D2 was not retained as the sole lit fragment: ${result.fragmentEdges}" }
+        assertTrue("traditional scores should reproduce the noisy case", listOf(
+            edge.backgroundTop, edge.backgroundRight, edge.backgroundBottom, edge.backgroundLeft,
+        ).all { it >= 0.50 })
+        assertTrue("top longest=${edge.occupancy.top.longestRun}",
+            edge.occupancy.top.longestRun >= 0.55)
+        assertTrue("right longest=${edge.occupancy.right.longestRun}",
+            edge.occupancy.right.longestRun >= 0.35)
+        assertTrue("bottom longest=${edge.occupancy.bottom.longestRun}",
+            edge.occupancy.bottom.longestRun <= 0.12)
+        assertTrue("left longest=${edge.occupancy.left.longestRun}",
+            edge.occupancy.left.longestRun <= 0.12)
+
+        val lit = BoardObjectObservation(
+            id = "L1",
+            phase = BoardObjectPhase.LIT,
+            observedCells = setOf(GridCell(1, 3)),
+            possibleItemIndices = listOf(1),
+            confidence = 0.92,
+            evidence = "dataset regression",
+        )
+        val completion = FragmentCompletionPlanner().complete(
+            result.geometry.board,
+            result.boardCells,
+            result.itemCards,
+            listOf(lit),
+            result.fragmentEdges,
+        )
+        assertEquals(setOf("D1", "E1", "E2"), completion.recommendations
+            .map { cellAddress(it.row, it.column) }.toSet())
+        assertEquals(1, completion.fullCompletions.size)
+        assertTrue(completion.objects.single().completionEvidence.contains("边缘覆盖长度"))
     }
 
     @Test
