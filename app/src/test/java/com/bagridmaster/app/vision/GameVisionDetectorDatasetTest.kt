@@ -19,6 +19,24 @@ import org.junit.Test
 
 class GameVisionDetectorDatasetTest {
     @Test
+    fun lateBoardRecoversOneGridRowPhaseSlipWithCandidateAndExperience() {
+        val frame = loadFrame(resolveFile("dataset/regressions/board-one-row-phase-slip-20260909.png"))
+        val detector = GameVisionDetector()
+        val result = checkNotNull(detector.analyze(frame))
+        val rawBoard = result.geometry.board.region
+        assertTrue("expanded phase candidates kept the wrong top: " + rawBoard, abs(rawBoard.top - 261) <= 24)
+        assertTrue("expanded phase candidates kept the wrong bottom: " + rawBoard, abs(rawBoard.bottom - 839) <= 24)
+
+        val key = CalibrationKey(com.bagridmaster.app.model.ImageInputMode.SCREEN_CAPTURE, frame.width, frame.height)
+        val reference = ScreenRegion(1148, 261, 2189, 839)
+        val tracker = BoardCalibrationTracker(listOf(BoardCalibrationProfile(key, reference)))
+        val shifted = checkNotNull(detector.reinspect(frame, result, ScreenRegion(1146, 379, 2184, 955)))
+        val recovered = calibrateLocatedBoard(frame, key.source, tracker, detector, shifted)
+        assertEquals(reference, checkNotNull(recovered.detection).geometry.board.region)
+        assertTrue(recovered.note.contains("1格向下相位偏移"))
+    }
+
+    @Test
     fun threeSidedFragmentsKeepEveryVisibleDirectionAndSquareInventoryShape() {
         val frame = loadFrame(resolveFile("dataset/regressions/three-sided-fragments-square-item-20260902.jpg"))
         val result = checkNotNull(GameVisionDetector().analyze(frame))

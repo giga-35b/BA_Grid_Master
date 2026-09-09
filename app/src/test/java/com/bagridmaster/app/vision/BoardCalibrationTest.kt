@@ -38,6 +38,24 @@ class BoardCalibrationTest {
         assertTrue(tracker.observe(key, far, false).note.contains("不强行校正"))
     }
 
+    @Test fun recoversOneRowVerticalPhaseSlipOnNonLearnableFrame() {
+        val tracker = learned()
+        val cell = board.height / 5
+        val raw = shift(board, x = -2, y = cell).copy(right = board.right - 5, bottom = board.bottom + cell - 2)
+        val result = tracker.observe(key, raw, false)
+        assertEquals(board, result.region)
+        assertTrue(result.note.contains("1格向下相位偏移"))
+        assertEquals(board, tracker.profiles.single().region)
+    }
+
+    @Test fun inconsistentVerticalJumpIsNotTreatedAsGridPhase() {
+        val tracker = learned()
+        val cell = board.height / 5
+        val raw = shift(board, y = cell).copy(bottom = board.bottom + cell + 30)
+        val result = tracker.observe(key, raw, false)
+        assertEquals(raw, result.region)
+    }
+
     @Test fun stableLargeDeviationReplacesReferenceOnlyOnLearnableFrames() {
         val tracker = learned()
         val moved = shift(board, -130)

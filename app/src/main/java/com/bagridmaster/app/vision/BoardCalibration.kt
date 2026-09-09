@@ -35,6 +35,14 @@ class BoardCalibrationTracker(saved: List<BoardCalibrationProfile> = emptyList()
             return CalibrationDecision(reference,
                 "经验校正：采用经验坐标；最大角点误差 ${distance}px ≤ ${limit}px；原始 ${raw.label()} → 经验 ${reference.label()}")
         }
+        val verticalPhaseRows = reference?.let { verticalPhaseRows(key, raw, it) }
+        if (reference != null && verticalPhaseRows != null) {
+            samples.remove(key)
+            val direction = if (verticalPhaseRows > 0) "向下" else "向上"
+            return CalibrationDecision(reference,
+                "经验校正：检测到纵向${kotlin.math.abs(verticalPhaseRows)}格${direction}相位偏移；" +
+                    "原始 ${raw.label()} → 经验 ${reference.label()}，重新采样后再采用")
+        }
         if (!learnable) {
             samples.remove(key)
             return CalibrationDecision(raw, if (reference == null) {
@@ -94,6 +102,21 @@ class BoardCalibrationTracker(saved: List<BoardCalibrationProfile> = emptyList()
         ).roundToInt().coerceAtLeast(1)
         fun cornerError(a: ScreenRegion, b: ScreenRegion): Int = maxOf(
             abs(a.left - b.left), abs(a.top - b.top), abs(a.right - b.right), abs(a.bottom - b.bottom))
+        fun verticalPhaseRows(key: CalibrationKey, raw: ScreenRegion, reference: ScreenRegion): Int? {
+            if (!validRegion(key, raw) || !validRegion(key, reference)) return null
+            val cellHeight = (raw.height / 5.0 + reference.height / 5.0) / 2.0
+            val tolerance = max(stabilityTolerance(key) * 2.0, cellHeight * 0.14)
+            val horizontalError = max(abs(raw.left - reference.left), abs(raw.right - reference.right))
+            if (horizontalError > correctionLimit(key, reference) ||
+                abs(raw.width - reference.width) > tolerance || abs(raw.height - reference.height) > tolerance) return null
+            val topDelta = raw.top - reference.top
+            val bottomDelta = raw.bottom - reference.bottom
+            if (abs(topDelta - bottomDelta) > tolerance) return null
+            val meanDelta = (topDelta + bottomDelta) / 2.0
+            val rows = (meanDelta / cellHeight).roundToInt()
+            if (abs(rows) != 1 || abs(meanDelta - rows * cellHeight) > tolerance) return null
+            return rows
+        }
         fun validRegion(key: CalibrationKey, region: ScreenRegion): Boolean =
             key.width in 320..16384 && key.height in 240..16384 && region.left in 0 until key.width && region.top in 0 until key.height &&
                 region.right in (region.left + 1)..key.width && region.bottom in (region.top + 1)..key.height && region.width >= 72 && region.height >= 40 &&

@@ -702,16 +702,23 @@ class GameVisionDetector : FrameGeometryDetector {
         val hasEmbeddedViewport = viewport.left > 0 || viewport.top > 0 ||
             viewport.right < frame.width || viewport.bottom < frame.height
         val viewportAspect = viewport.width.toDouble() / viewport.height
-        val candidates = when {
-            hasEmbeddedViewport -> listOf(candidate, candidate.copy(top = candidate.top + candidate.spacing))
+        val horizontalCandidates = when {
+            hasEmbeddedViewport -> listOf(candidate)
             viewportAspect < TABLET_ASPECT_LIMIT -> (0..2).map { offset ->
                 candidate.copy(left = candidate.left + offset * candidate.spacing)
             }
             // The toolbar directly above the board can form a complete-looking 9×5 lattice one
             // period too early even in a full-screen capture. Always compare the next vertical
             // phase instead of limiting this alias check to embedded/letterboxed viewports.
-            else -> listOf(candidate, candidate.copy(top = candidate.top + candidate.spacing))
+            else -> listOf(candidate)
         }
+        // Compare both adjacent vertical phases: headers can make the raw lattice one row early,
+        // while strong controls below a late-game board can make it one row late.
+        val candidates = horizontalCandidates.flatMap { horizontal ->
+            listOf(0, -1, 1).map { rowOffset ->
+                horizontal.copy(top = horizontal.top + rowOffset * horizontal.spacing)
+            }
+        }.distinctBy { Triple(it.left, it.top, it.spacing) }
         val variants = candidates
             .mapNotNull { shifted ->
                 val estimatedBottom = (shifted.top + BOARD_ROWS * shifted.spacing) * gray.scale
@@ -722,7 +729,9 @@ class GameVisionDetector : FrameGeometryDetector {
                 }
             }
             .distinct()
-            .map { region ->
+            .map { roughRegion ->
+                val candidateSquareFit = fitStrictSquareGrid(frame, roughRegion, viewport)
+                val region = candidateSquareFit?.region ?: roughRegion
                 val contentQuality = boardGridQuality(frame, region)
                 val tabletPositionQuality = if (viewportAspect < TABLET_ASPECT_LIMIT) {
                     val relativeLeft = (region.left - viewport.left).toDouble() / viewport.width
@@ -731,18 +740,28 @@ class GameVisionDetector : FrameGeometryDetector {
                 val quality = if (viewportAspect < TABLET_ASPECT_LIMIT) {
                     contentQuality * 0.72 + tabletPositionQuality * 0.28
                 } else contentQuality
-                BoardSelection(region, quality)
+                BoardSelection(region, quality, candidateSquareFit, candidateSquareFit?.grid)
             }
         val base = variants.firstOrNull() ?: run {
             val fallback = enforceSquareGrid(refineBoard(frame, gray, candidate), viewport)
             return BoardSelection(fallback.region, 0.0, grid = fallback.grid)
         }
-        val alternative = variants.drop(1).maxByOrNull { it.quality }
-        // Keep the original geometry unless an alternative is materially more board-like.
-        // This prevents decorative textures from making the geometry oscillate between frames.
-        val selected = if (alternative != null &&
-            alternative.quality >= base.quality + BOARD_ALIAS_QUALITY_MARGIN) alternative else base
-        val squareFit = fitStrictSquareGrid(frame, selected.region, viewport)
+        val alternative = variants.drop(1).maxWithOrNull(compareBy<BoardSelection>(
+            { it.squareFit?.anchorCount ?: 0 },
+            { it.squareFit?.confidence ?: 0.0 },
+            { it.quality },
+        ))
+        val strongerGridPhase = alternative?.squareFit?.let { candidateFit ->
+            val baseFit = base.squareFit
+            candidateFit.anchorCount >= (baseFit?.anchorCount ?: 0) + BOARD_ALIAS_ANCHOR_ADVANTAGE &&
+                candidateFit.confidence >= (baseFit?.confidence ?: 0.0) + BOARD_ALIAS_CONFIDENCE_ADVANTAGE &&
+                alternative.quality >= base.quality - BOARD_ALIAS_CONTENT_TOLERANCE
+        } == true
+        // A materially better content score still resolves header aliases. A much stronger set of
+        // existing internal grid anchors can also select the adjacent phase without new UI cues.
+        val selected = if (alternative != null && (alternative.quality >=
+                base.quality + BOARD_ALIAS_QUALITY_MARGIN || strongerGridPhase)) alternative else base
+        val squareFit = selected.squareFit ?: fitStrictSquareGrid(frame, selected.region, viewport)
         if (squareFit != null) return selected.copy(
             region = squareFit.region,
             squareFit = squareFit,
@@ -1579,6 +1598,9 @@ class GameVisionDetector : FrameGeometryDetector {
         private const val BOARD_COLUMNS = 9
         private const val MIN_BOARD_CONTENT_SCORE = 0.40
         private const val BOARD_ALIAS_QUALITY_MARGIN = 0.055
+        private const val BOARD_ALIAS_ANCHOR_ADVANTAGE = 6
+        private const val BOARD_ALIAS_CONFIDENCE_ADVANTAGE = 0.035
+        private const val BOARD_ALIAS_CONTENT_TOLERANCE = 0.18
         private const val MAX_TRAY_CANDIDATES = 4
         private const val TABLET_ASPECT_LIMIT = 1.75
         private const val EXPECTED_BOARD_LEFT_RATIO = 0.47
